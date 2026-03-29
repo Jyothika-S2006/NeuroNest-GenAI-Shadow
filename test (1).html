@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NeuroNest Pipeline Test</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0a0a1a;
+    color: #e2e8f0;
+    font-family: 'Courier New', monospace;
+    min-height: 100vh;
+    padding: 2rem;
+  }
+  h1 { color: #a855f7; margin-bottom: 1.5rem; font-size: 1.4rem; letter-spacing: 2px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+  .card {
+    background: #12122a;
+    border: 1px solid #2d2d5e;
+    border-radius: 12px;
+    padding: 1.2rem;
+  }
+  .card h3 { font-size: 0.7rem; letter-spacing: 3px; color: #6366f1; margin-bottom: 0.8rem; text-transform: uppercase; }
+  .value { font-size: 1.5rem; font-weight: bold; color: #f8fafc; }
+  .sub { font-size: 0.8rem; color: #94a3b8; margin-top: 0.3rem; }
+  .badge {
+    display: inline-block;
+    padding: 0.2rem 0.7rem;
+    border-radius: 99px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    margin-top: 0.5rem;
+  }
+  .risk-bar-wrap { background: #1e1e3f; border-radius: 99px; height: 8px; margin-top: 0.7rem; }
+  .risk-bar { height: 8px; border-radius: 99px; transition: width 0.5s ease, background 0.5s ease; }
+  .alert-box {
+    background: #1a0a2e;
+    border: 1px solid #7c3aed;
+    border-radius: 12px;
+    padding: 1rem 1.5rem;
+    margin-bottom: 1.5rem;
+    font-size: 1rem;
+    color: #c4b5fd;
+    display: none;
+  }
+  .alert-box.visible { display: block; }
+  #status { font-size: 0.75rem; color: #64748b; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #64748b; margin-right: 6px; }
+  .dot.connected { background: #22c55e; }
+  video { border-radius: 12px; width: 100%; max-width: 400px; border: 1px solid #2d2d5e; }
+  .flags { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem; }
+  .flag { padding: 0.15rem 0.5rem; border-radius: 6px; font-size: 0.7rem; background: #1e1e3f; border: 1px solid #3d3d7e; }
+  .flag.active { background: #4c1d95; border-color: #7c3aed; color: #c4b5fd; }
+</style>
+</head>
+<body>
+
+<h1>🧠 NEURONEST · AI PIPELINE TEST</h1>
+
+<p id="status"><span class="dot" id="dot"></span>Connecting to AI pipeline...</p>
+<br>
+
+<div class="alert-box" id="alertBox"></div>
+
+<div class="grid">
+  <div class="card">
+    <h3>📐 Pose Detection</h3>
+    <div class="value" id="posture">—</div>
+    <div class="sub" id="confidence">Confidence: —</div>
+    <div class="flags">
+      <span class="flag" id="flag-sitting">Sitting</span>
+      <span class="flag" id="flag-slouch">Slouching</span>
+      <span class="flag" id="flag-pacing">Pacing</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>⏰ Routine Tracker</h3>
+    <div class="value" id="actual-activity">—</div>
+    <div class="sub">Expected: <span id="expected-activity">—</span></div>
+    <div class="sub" id="deviation-msg" style="color:#f59e0b; margin-top:0.4rem;"></div>
+    <div class="sub" style="margin-top:0.4rem">Inactive: <span id="hours-inactive">0</span>h</div>
+  </div>
+
+  <div class="card">
+    <h3>⚡ Risk Score</h3>
+    <div class="value" id="risk-score">0</div>
+    <div class="sub" id="risk-level">Level: Low</div>
+    <div class="risk-bar-wrap"><div class="risk-bar" id="risk-bar" style="width:0%;background:#22c55e"></div></div>
+    <div class="sub" style="margin-top:0.6rem">Emotion: <span id="emotion">—</span></div>
+  </div>
+
+  <div class="card">
+    <h3>📷 Camera Feed</h3>
+    <video id="video" autoplay muted playsinline></video>
+  </div>
+</div>
+
+<!-- VIDEO UPLOAD SECTION -->
+<div class="card" style="margin-bottom:1.5rem">
+  <h3>🎬 Test with Video File (no webcam needed)</h3>
+  <br>
+  <input type="file" id="videoInput" accept="video/*"
+    style="color:#e2e8f0; font-size:0.85rem; margin-bottom:0.8rem; display:block">
+  <button id="uploadBtn" onclick="uploadVideo()"
+    style="background:#4c1d95; color:#e2e8f0; border:none; border-radius:8px;
+           padding:0.5rem 1.2rem; cursor:pointer; font-family:inherit; font-size:0.85rem">
+    ▶ Analyze Video
+  </button>
+  <div id="progress" style="color:#6366f1; font-size:0.8rem; margin-top:0.6rem"></div>
+</div>
+
+<script>
+async function uploadVideo() {
+  const file = document.getElementById('videoInput').files[0]
+  if (!file) { alert('Please select a video file first'); return }
+
+  const btn = document.getElementById('uploadBtn')
+  const prog = document.getElementById('progress')
+  btn.disabled = true
+  btn.textContent = 'Uploading...'
+  prog.textContent = 'Sending to AI pipeline...'
+
+  const formData = new FormData()
+  formData.append('file', file)
+
+  // Use current host for the API URL
+  const apiBase = `${window.location.protocol}//${window.location.hostname}:8000`
+
+  try {
+    const response = await fetch(`${apiBase}/analyze/video`, {
+      method: 'POST', body: formData
+    })
+
+    btn.textContent = 'Processing...'
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      const lines = decoder.decode(value).split('\n').filter(Boolean)
+      for (const line of lines) {
+        try {
+          const raw = JSON.parse(line)
+          // Reuse same display logic
+          updateDisplay(raw)
+          if (raw.progress_pct !== undefined)
+            prog.textContent = `Processing: ${raw.progress_pct}% complete`
+        } catch(e) {}
+      }
+    }
+
+    prog.textContent = '✅ Video analysis complete!'
+    btn.textContent = '▶ Analyze Video'
+    btn.disabled = false
+  } catch(err) {
+    prog.textContent = `Error: ${err.message}`
+    btn.textContent = '▶ Analyze Video'
+    btn.disabled = false
+  }
+}
+</script>
+
+<script type="module">
+import { NeuroPipeline, formatResult, riskColor } from './pipeline_client.js'
+
+function updateDisplay(raw) {
+  const d = formatResult(raw)
+  document.getElementById('posture').textContent    = d.posture
+  document.getElementById('confidence').textContent = `Confidence: ${d.confidence}%`
+  document.getElementById('flag-sitting').className = 'flag' + (d.isSitting   ? ' active' : '')
+  document.getElementById('flag-slouch').className  = 'flag' + (d.isSlouching ? ' active' : '')
+  document.getElementById('flag-pacing').className  = 'flag' + (d.isPacing    ? ' active' : '')
+  document.getElementById('actual-activity').textContent   = d.actual
+  document.getElementById('expected-activity').textContent = d.expected
+  document.getElementById('deviation-msg').textContent     = d.deviationMsg
+  document.getElementById('hours-inactive').textContent    = d.hoursInactive.toFixed(1)
+  const color = riskColor(d.riskLevel)
+  document.getElementById('risk-score').textContent    = d.riskScore
+  document.getElementById('risk-level').textContent    = `Level: ${d.riskLevel}`
+  document.getElementById('risk-bar').style.width      = `${d.riskScore}%`
+  document.getElementById('risk-bar').style.background = color
+  document.getElementById('emotion').textContent       = d.emotion
+  if (d.alert) {
+    const box = document.getElementById('alertBox')
+    box.textContent = d.alert
+    box.classList.add('visible')
+    setTimeout(() => box.classList.remove('visible'), 8000)
+  }
+}
+
+// Make updateDisplay available to the video upload script
+window.updateDisplay = updateDisplay
+</script>
+</body>
+</html>
